@@ -104,8 +104,9 @@ class TodoApp(ft.Column):
             ft.Column(spacing=25, controls=[self.filter_tabs, self.tasks, ft.Button("Clear completed", on_click=self.clear_completed)]),
         ]
         
-        
+
         self.load_tasks()
+
 
     # --- DuckDB & Client Storage ---
 
