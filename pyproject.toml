@@ -8,7 +8,9 @@ authors = [
     { name = "Flet developer", email = "you@example.com" }
 ]
 dependencies = [
-    "flet>=0.80.5"
+    "duckdb>=1.4.4",
+    "flet>=0.80.5",
+    "pyarrow>=23.0.1",
 ]
 
 [dependency-groups]
