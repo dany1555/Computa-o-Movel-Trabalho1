@@ -93,6 +93,7 @@ class TodoApp(ft.Column):
             tabs=[ft.Tab(label="all"), ft.Tab(label="active"), ft.Tab(label="completed")],
         )
 
+
         self.filter_tabs = ft.Tabs(
             length=3, selected_index=0, on_change=lambda e: self.update(), content=self.filter
         )
