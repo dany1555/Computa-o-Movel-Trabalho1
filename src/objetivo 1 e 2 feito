@@ -5,12 +5,6 @@ import uuid
 import json
 import os
 import duckdb
-from dotenv import load_dotenv
-from flet.security import encrypt, decrypt
-
-# Carregar chave do ficheiro .env
-load_dotenv()
-SECRET_KEY = os.getenv("SECRET_KEY")
 
 # Ficheiros
 PARQUET_FILE = "tasks.parquet"
@@ -99,6 +93,7 @@ class TodoApp(ft.Column):
             tabs=[ft.Tab(label="all"), ft.Tab(label="active"), ft.Tab(label="completed")],
         )
 
+
         self.filter_tabs = ft.Tabs(
             length=3, selected_index=0, on_change=lambda e: self.update(), content=self.filter
         )
@@ -109,7 +104,9 @@ class TodoApp(ft.Column):
             ft.Column(spacing=25, controls=[self.filter_tabs, self.tasks, ft.Button("Clear completed", on_click=self.clear_completed)]),
         ]
         
+
         self.load_tasks()
+
 
     # --- DuckDB & Client Storage ---
 
@@ -117,50 +114,39 @@ class TodoApp(ft.Column):
         tasks_data = []
         loaded = False
         
-        # 1. Client-Side Storage (Browser)
+        # 1. Tentar carregar do Client-Side Storage (Web) ou Ficheiro Local (Desktop)
+        
+        # Tentativa A: Client-Side Storage (Browser)
         try:
-            if hasattr(self._page_ref, 'client_storage') and SECRET_KEY:
-                stored_encrypted = self._page_ref.client_storage.get(JSON_STORAGE_KEY)
-                if stored_encrypted:
-                    decrypted = decrypt(stored_encrypted, SECRET_KEY)
-                    if isinstance(decrypted, bytes):
-                        tasks_data = json.loads(decrypted.decode('utf-8'))
-                    else:
-                        tasks_data = json.loads(decrypted)
-                    print("Carregado do Client-Side (Browser) - Desencriptado.")
+            if hasattr(self._page_ref, 'client_storage'):
+                stored_json = self._page_ref.client_storage.get(JSON_STORAGE_KEY)
+                if stored_json:
+                    tasks_data = json.loads(stored_json)
+                    print("Carregado do Client-Side (Browser).")
                     loaded = True
         except: pass
 
-        # 2. Ficheiro Local JSON (Desktop/App)
-        if not loaded and os.path.exists(JSON_FILE) and SECRET_KEY:
+        # Tentativa B: Ficheiro Local JSON (Desktop/App)
+        if not loaded and os.path.exists(JSON_FILE):
             try:
                 with open(JSON_FILE, "r", encoding="utf-8") as f:
-                    encrypted_data = f.read()
-                    if encrypted_data:
-                        decrypted = decrypt(encrypted_data, SECRET_KEY)
-                        if isinstance(decrypted, bytes):
-                            tasks_data = json.loads(decrypted.decode('utf-8'))
-                        else:
-                            tasks_data = json.loads(decrypted)
-                        print("Carregado do ficheiro JSON local - Desencriptado.")
-                        loaded = True
+                    tasks_data = json.load(f)
+                    print("Carregado do ficheiro JSON local.")
+                    loaded = True
             except: pass
 
-        # 3. Ficheiro Parquet (DuckDB) - ENCRIPTADO
-        if not loaded and os.path.exists(PARQUET_FILE) and SECRET_KEY:
+        # 2. Se não tiver nada, tenta carregar do ficheiro Parquet (DuckDB)
+        if not loaded and os.path.exists(PARQUET_FILE):
             try:
                 con = duckdb.connect()
-                result = con.execute(f"SELECT encrypted_data FROM '{PARQUET_FILE}'").fetchall()
+                
+                # Agora deve funcionar porque os nomes das colunas vão corresponder
+                result = con.execute(f"SELECT task_id, task_name, completed FROM '{PARQUET_FILE}'").fetchall()
                 con.close()
                 
-                if result and result[0][0]:
-                    encrypted_data = result[0][0]
-                    decrypted = decrypt(encrypted_data, SECRET_KEY)
-                    if isinstance(decrypted, bytes):
-                        tasks_data = json.loads(decrypted.decode('utf-8'))
-                    else:
-                        tasks_data = json.loads(decrypted)
-                    print("Carregado do ficheiro Parquet (DuckDB) - Desencriptado.")
+                if result:
+                    tasks_data = [{"task_id": r[0], "task_name": r[1], "completed": r[2]} for r in result]
+                    print("Carregado do ficheiro Parquet (DuckDB).")
             except Exception as e:
                 print(f"Erro DuckDB Load: {e}")
 
@@ -172,43 +158,40 @@ class TodoApp(ft.Column):
         # Serializar tarefas
         tasks_list = []
         for task in self.tasks.controls:
-            tasks_list.append({
-                "task_id": task.task_id,
-                "task_name": task.task_name,
-                "completed": task.completed
-            })
-
-        if not SECRET_KEY:
-            print("Erro: SECRET_KEY não definida no .env")
-            return
-
-        # Encriptar os dados
-        json_str = json.dumps(tasks_list)
-        encrypted_data = encrypt(json_str, SECRET_KEY)
+            tasks_list.append((task.task_id, task.task_name, task.completed))
 
         # (A) Client-Side Storage
         try:
-            if hasattr(self._page_ref, 'client_storage'):
-                self._page_ref.client_storage.set(JSON_STORAGE_KEY, encrypted_data)
-                print("Salvo no Client-Side (Browser) - Encriptado")
+            json_str = json.dumps([{"task_id": t[0], "task_name": t[1], "completed": t[2]} for t in tasks_list])
             
+            # Tentar guardar no client_storage do browser
+            if hasattr(self._page_ref, 'client_storage'):
+                self._page_ref.client_storage.set(JSON_STORAGE_KEY, json_str)
+                print("Salvo no Client-Side (Browser)")
+            
+            # Também guardar num ficheiro local JSON
             with open(JSON_FILE, "w", encoding="utf-8") as f:
-                f.write(encrypted_data)
+                json.dump(json.loads(json_str), f, indent=4)
                 
         except Exception as e:
             print(f"Erro armazenamento A: {e}")
 
-        # (B) DuckDB -> Parquet ENCRIPTADO
+        # (B) DuckDB -> Parquet
         try:
             con = duckdb.connect(':memory:')
             
-            con.execute("CREATE TABLE tasks (encrypted_data TEXT)")
-            con.execute("INSERT INTO tasks VALUES (?)", [encrypted_data])
+            # CORREÇÃO: Criar tabela com os nomes corretos das colunas (task_id, task_name)
+            con.execute("CREATE TABLE tasks (task_id TEXT, task_name TEXT, completed BOOLEAN)")
             
-            con.execute(f"COPY tasks TO '{PARQUET_FILE}' (FORMAT PARQUET)")
+            if tasks_list:
+                # Inserir dados na tabela
+                con.executemany("INSERT INTO tasks VALUES (?, ?, ?)", tasks_list)
+                
+                # Exportar a tabela para ficheiro Parquet
+                con.execute(f"COPY tasks TO '{PARQUET_FILE}' (FORMAT PARQUET)")
             
             con.close()
-            print(f"Guardado em {PARQUET_FILE} - Encriptado")
+            print(f"Guardado em {PARQUET_FILE}")
         except Exception as e:
             print(f"Erro DuckDB Save: {e}")
 
@@ -245,7 +228,7 @@ class TodoApp(ft.Column):
 
 
 def main(page: ft.Page):
-    page.title = "To-Do App Encriptada"
+    page.title = "To-Do App DuckDB"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.update()
     app = TodoApp(page)
