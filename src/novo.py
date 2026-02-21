@@ -238,6 +238,7 @@ class TodoApp(ft.Column):
         self.save_tasks()
         self.update()
 
+
     def before_update(self):
         status = self.filter.tabs[self.filter_tabs.selected_index].label
         for task in self.tasks.controls:
