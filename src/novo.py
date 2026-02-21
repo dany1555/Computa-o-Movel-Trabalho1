@@ -251,4 +251,5 @@ def main(page: ft.Page):
     app = TodoApp(page)
     page.add(app)
 
+
 ft.run(main)
