@@ -244,6 +244,7 @@ class TodoApp(ft.Column):
             task.visible = (status == "all" or (status == "active" and not task.completed) or (status == "completed" and task.completed))
 
 
+
 def main(page: ft.Page):
     page.title = "To-Do App Encriptada"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
