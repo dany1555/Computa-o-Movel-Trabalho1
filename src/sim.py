@@ -280,6 +280,7 @@ def main(page: ft.Page):
     async def logout_button_click(e):
         await page.logout()
 
+
     def on_logout(e):
         toggle_login_buttons()
 
