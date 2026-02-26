@@ -1,14 +1,12 @@
 import flet as ft
+from flet.auth.providers import GitHubOAuthProvider
+from flet.security import encrypt, decrypt
 from dataclasses import field
 from typing import Callable
 import uuid
 import json
 import os
-import duckdb
 from dotenv import load_dotenv
-from flet.security import encrypt, decrypt
-import requests
-import webbrowser
 
 # Carregar variáveis de ambiente
 load_dotenv()
@@ -90,6 +88,7 @@ class Task(ft.Column):
             self.on_status_change()
 
     def delete_clicked(self, e):
+        print(f"[TO-DO] A remover tarefa: {self.task_name}")
         if self.on_delete:
             self.on_delete(self)
 
@@ -157,8 +156,6 @@ class TodoApp(ft.Column):
         ]
         
         self.load_tasks()
-
-    # --- DuckDB & Client Storage ---
 
     def load_tasks(self):
         if not self.user_id:
@@ -234,6 +231,7 @@ class TodoApp(ft.Column):
 
     # --- Ações ---
     def add_clicked(self, e):
+        print(f"[TO-DO] A adicionar tarefa: {self.new_task.value}")
         self.add_task_to_ui(self.new_task.value)
         self.new_task.value = ""
         self.save_tasks()
@@ -244,11 +242,13 @@ class TodoApp(ft.Column):
         self.update()
 
     def task_delete(self, task):
+        print(f"[TO-DO] Tarefa '{task.task_name}' removida com sucesso.")
         self.tasks.controls.remove(task)
         self.save_tasks()
         self.update()
     
     def clear_completed(self, e):
+        print("[TO-DO] A limpar tarefas concluídas.")
         self.tasks.controls = [task for task in self.tasks.controls if not task.completed]
         self.save_tasks()
         self.update()
@@ -258,51 +258,51 @@ class TodoApp(ft.Column):
         for task in self.tasks.controls:
             task.visible = (status == "all" or (status == "active" and not task.completed) or (status == "completed" and task.completed))
 
-
 def main(page: ft.Page):
     page.title = "To-Do App Autenticada"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.update()
-    
-    # Verificar se há callback do OAuth
-    if "/oauth/callback?" in page.route:
-        # Extrair código da URL
-        code = page.route.split("code=")[1].split("&")[0]
+
+    provider = GitHubOAuthProvider(
+        client_id=os.getenv("GITHUB_CLIENT_ID"),
+        client_secret=os.getenv("GITHUB_CLIENT_SECRET"),
+        redirect_url="http://localhost:8550/oauth_callback",
+    )
+
+    async def login_button_click(e):
+        await page.login(provider, scope=["public_repo"])
+
+    def on_login(e: ft.LoginEvent):
+        if not e.error:
+            toggle_login_buttons()
+        else:
+            print(f"Erro no login: {e.error}")
+
+    async def logout_button_click(e):
+        await page.logout()
+
+    def on_logout(e):
+        toggle_login_buttons()
+
+    def toggle_login_buttons():
+        is_logged_in = page.auth is not None
         
-        # Trocar código por token
-        response = requests.post(
-            TOKEN_URL,
-            data={
-                "client_id": GITHUB_CLIENT_ID,
-                "client_secret": GITHUB_CLIENT_SECRET,
-                "code": code,
-            },
-            headers={"Accept": "application/json"}
-        )
+        page.controls.clear()
         
-        access_token = response.json().get("access_token")
-        
-        # Obter info do utilizador
-        user_response = requests.get(
-            API_USER_URL,
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
-        
-        user_id = str(user_response.json().get("id"))
-        
-        # Mostrar app
-        page.views.clear()
-        app = TodoApp(page, user_id)
-        page.views.append(ft.View(controls=[app]))
-        page.update()
-    else:
-        # Mostrar ecrã de login
-        def on_login(url):
-            webbrowser.open(url)
-        
-        page.views.clear()
-        login_view = LoginView(on_login)
-        page.views.append(ft.View(controls=[login_view]))
+        if is_logged_in:
+            user_id = str(page.auth.user.id)
+            app = TodoApp(page, user_id)
+            page.add(logout_button, app)
+        else:
+            page.add(login_button)
+            
         page.update()
 
-ft.app(main, web_view=True, port=8550)
+    login_button = ft.Button("Login with GitHub", on_click=login_button_click)
+    logout_button = ft.Button("Logout", on_click=logout_button_click)
+    
+    toggle_login_buttons()
+
+    page.on_login = on_login
+    page.on_logout = on_logout
+
+ft.run(main, port=8550, view=ft.AppView.WEB_BROWSER)
