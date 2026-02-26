@@ -283,6 +283,7 @@ def main(page: ft.Page):
     def on_logout(e):
         toggle_login_buttons()
 
+
     def toggle_login_buttons():
         is_logged_in = page.auth is not None
         
@@ -300,7 +301,7 @@ def main(page: ft.Page):
     login_button = ft.Button("Login with GitHub", on_click=login_button_click)
     logout_button = ft.Button("Logout", on_click=logout_button_click)
     
-    
+
     toggle_login_buttons()
 
     page.on_login = on_login
