@@ -305,4 +305,5 @@ def main(page: ft.Page):
     page.on_login = on_login
     page.on_logout = on_logout
 
+
 ft.run(main, port=8550, view=ft.AppView.WEB_BROWSER)
