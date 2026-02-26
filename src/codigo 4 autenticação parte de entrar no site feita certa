@@ -163,56 +163,33 @@ class TodoApp(ft.Column):
             
         tasks_data = []
         
-        # --- DUCKDB / PARQUET ---
+        # Client-Side Storage
         try:
-            import duckdb
-            
-            if os.path.exists(PARQUET_FILE):
-                # Ler diretamente do ficheiro Parquet
-                result = duckdb.sql(
-                    f"SELECT task_data FROM '{PARQUET_FILE}' WHERE user_id = '{self.user_id}'"
-                ).fetchone()
-                
-                if result:
-                    encrypted_data = result[0]
-                    decrypted = decrypt(encrypted_data, SECRET_KEY)
+            if hasattr(self._page_ref, 'client_storage') and SECRET_KEY:
+                storage_key = f"{JSON_STORAGE_KEY}_{self.user_id}"
+                stored_encrypted = self._page_ref.client_storage.get(storage_key)
+                if stored_encrypted:
+                    decrypted = decrypt(stored_encrypted, SECRET_KEY)
                     if isinstance(decrypted, bytes):
                         tasks_data = json.loads(decrypted.decode('utf-8'))
                     else:
                         tasks_data = json.loads(decrypted)
-                    print(f"[TO-DO] Dados carregados do Parquet")
-        except Exception as e:
-            print(f"[TO-DO] Erro ao carregar de Parquet: {e}")
-        
-        # Fallback: Client-Side Storage
-        if not tasks_data:
-            try:
-                if hasattr(self._page_ref, 'client_storage') and SECRET_KEY:
-                    storage_key = f"{JSON_STORAGE_KEY}_{self.user_id}"
-                    stored_encrypted = self._page_ref.client_storage.get(storage_key)
-                    if stored_encrypted:
-                        decrypted = decrypt(stored_encrypted, SECRET_KEY)
-                        if isinstance(decrypted, bytes):
-                            tasks_data = json.loads(decrypted.decode('utf-8'))
-                        else:
-                            tasks_data = json.loads(decrypted)
-            except: pass
+        except: pass
 
-        # Fallback: Ficheiro Local JSON
-        if not tasks_data:
-            try:
-                if os.path.exists(JSON_FILE) and SECRET_KEY:
-                    user_json_file = f"tasks_{self.user_id}.json"
-                    if os.path.exists(user_json_file):
-                        with open(user_json_file, "r", encoding="utf-8") as f:
-                            encrypted_data = f.read()
-                            if encrypted_data:
-                                decrypted = decrypt(encrypted_data, SECRET_KEY)
-                                if isinstance(decrypted, bytes):
-                                    tasks_data = json.loads(decrypted.decode('utf-8'))
-                                else:
-                                    tasks_data = json.loads(decrypted)
-            except: pass
+        # Ficheiro Local JSON
+        try:
+            if os.path.exists(JSON_FILE) and SECRET_KEY:
+                user_json_file = f"tasks_{self.user_id}.json"
+                if os.path.exists(user_json_file):
+                    with open(user_json_file, "r", encoding="utf-8") as f:
+                        encrypted_data = f.read()
+                        if encrypted_data:
+                            decrypted = decrypt(encrypted_data, SECRET_KEY)
+                            if isinstance(decrypted, bytes):
+                                tasks_data = json.loads(decrypted.decode('utf-8'))
+                            else:
+                                tasks_data = json.loads(decrypted)
+        except: pass
 
         for t in tasks_data:
             self.add_task_to_ui(t.get('task_name'), t.get('task_id'), t.get('completed'))
@@ -235,46 +212,6 @@ class TodoApp(ft.Column):
         json_str = json.dumps(tasks_list)
         encrypted_data = encrypt(json_str, SECRET_KEY)
 
-        # --- DUCKDB / PARQUET ---
-        try:
-            import duckdb
-            
-            # Guardar TODOS os dados (outros users + atual)
-            all_data = []
-            
-            # 1. Se ficheiro existe, ler dados dos OUTROS utilizadores
-            if os.path.exists(PARQUET_FILE):
-                try:
-                    all_rows = duckdb.sql(
-                        f"SELECT user_id, task_data FROM '{PARQUET_FILE}' WHERE user_id != '{self.user_id}'"
-                    ).fetchall()
-                    for row in all_rows:
-                        all_data.append((row[0], row[1]))
-                except:
-                    pass
-            
-            # 2. Adicionar dados do utilizador ATUAL
-            all_data.append((self.user_id, encrypted_data))
-            
-            # 3. Criar nova tabela e guardar TUDO no Parquet
-            if all_data:
-                con = duckdb.connect()
-                
-                # Criar tabela temporária
-                con.execute("CREATE TEMPORARY TABLE dados(user_id VARCHAR, task_data VARCHAR)")
-                
-                # Inserir todos os dados
-                for uid, tdata in all_data:
-                    con.execute("INSERT INTO dados VALUES (?, ?)", [uid, tdata])
-                
-                # Exportar para Parquet (sobrescreve o ficheiro)
-                con.execute(f"COPY dados TO '{PARQUET_FILE}' (FORMAT PARQUET)")
-                con.close()
-                
-                print(f"[TO-DO] Dados guardados em Parquet")
-        except Exception as e:
-            print(f"[TO-DO] Erro ao guardar em Parquet: {e}")
-
         # Client-Side Storage
         try:
             if hasattr(self._page_ref, 'client_storage'):
@@ -292,6 +229,7 @@ class TodoApp(ft.Column):
                     on_status_change=self.task_status_change, on_delete=self.task_delete)
         self.tasks.controls.append(task)
 
+    # --- Ações ---
     def add_clicked(self, e):
         print(f"[TO-DO] A adicionar tarefa: {self.new_task.value}")
         self.add_task_to_ui(self.new_task.value)
@@ -339,12 +277,11 @@ def main(page: ft.Page):
         else:
             print(f"Erro no login: {e.error}")
 
-    def logout_button_click(e):
-        page.logout()
+    async def logout_button_click(e):
+        await page.logout()
 
     def on_logout(e):
         toggle_login_buttons()
-
 
     def toggle_login_buttons():
         is_logged_in = page.auth is not None
