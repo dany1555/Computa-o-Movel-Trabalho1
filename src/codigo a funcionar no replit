@@ -310,6 +310,7 @@ async def main(page: ft.Page):
             scope=["public_repo"],
         )
 
+
     def on_login(e: ft.LoginEvent):
         if not e.error:
             toggle_login_buttons()
