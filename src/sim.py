@@ -99,6 +99,7 @@ class Task(ft.Column):
         if self.on_status_change:
             self.on_status_change()
 
+
     def delete_clicked(self, e):
         print(f"[TO-DO] A remover tarefa: {self.task_name}")
         if self.on_delete:
