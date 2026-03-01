@@ -85,6 +85,7 @@ class Task(ft.Column):
         self.edit_view.visible = True
         self.update()
 
+
     def save_clicked(self, e):
         self.display_task.label = self.edit_name.value
         self.task_name = self.edit_name.value
