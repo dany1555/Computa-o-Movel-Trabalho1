@@ -368,15 +368,15 @@ class TodoApp(ft.Column):
                             or (status == "completed" and task.completed))
 
 
-def main(page: ft.Page):
+async def main(page: ft.Page):
     page.title = "To-Do App Autenticada"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
     provider = GitHubOAuthProvider(
-    client_id=os.getenv("GITHUB_CLIENT_ID"),
-    client_secret=os.getenv("GITHUB_CLIENT_SECRET"),
-    redirect_url=os.getenv("REDIRECT_URL"),
-)
+        client_id=os.getenv("GITHUB_CLIENT_ID"),
+        client_secret=os.getenv("GITHUB_CLIENT_SECRET"),
+        redirect_url="http://localhost:8550/oauth_callback",
+    )
 
     async def login_button_click(e):
         await page.login(provider, scope=["public_repo"])
