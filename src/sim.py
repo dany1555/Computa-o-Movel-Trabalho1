@@ -94,6 +94,7 @@ class Task(ft.Column):
         if self.on_status_change:
             self.on_status_change()
 
+
     def status_changed(self, e):
         self.completed = self.display_task.value
         if self.on_status_change:
