@@ -1,19 +1,39 @@
 import flet as ft
+from flet.auth.providers import GitHubOAuthProvider
+from flet.security import encrypt, decrypt
 from dataclasses import field
 from typing import Callable
 import uuid
 import json
 import os
-import duckdb
+from dotenv import load_dotenv
+
+# Carregar variáveis de ambiente
+load_dotenv()
+SECRET_KEY = os.getenv("SECRET_KEY")
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+
+# URLs do OAuth
+OAUTH_URL = "https://github.com/login/oauth/authorize"
+TOKEN_URL = "https://github.com/login/oauth/access_token"
+API_USER_URL = "https://api.github.com/user"
 
 # Ficheiros
 PARQUET_FILE = "tasks.parquet"
 JSON_FILE = "tasks_local.json"
 JSON_STORAGE_KEY = "todo_tasks_list"
 
+
 @ft.control
 class Task(ft.Column):
-    def __init__(self, task_name: str, task_id: str = None, completed: bool = False, on_status_change: Callable = None, on_delete: Callable = None):
+
+    def __init__(self,
+                 task_name: str,
+                 task_id: str = None,
+                 completed: bool = False,
+                 on_status_change: Callable = None,
+                 on_delete: Callable = None):
         super().__init__()
         self.task_id = task_id if task_id else str(uuid.uuid4())
         self.task_name = task_name
@@ -21,11 +41,9 @@ class Task(ft.Column):
         self.on_status_change = on_status_change
         self.on_delete = on_delete
 
-        self.display_task = ft.Checkbox(
-            value=self.completed, 
-            label=self.task_name, 
-            on_change=self.status_changed
-        )
+        self.display_task = ft.Checkbox(value=self.completed,
+                                        label=self.task_name,
+                                        on_change=self.status_changed)
         self.edit_name = ft.TextField(expand=1)
 
         self.display_view = ft.Row(
@@ -36,8 +54,12 @@ class Task(ft.Column):
                 ft.Row(
                     spacing=0,
                     controls=[
-                        ft.IconButton(icon=ft.Icons.CREATE_OUTLINED, tooltip="Edit To-Do", on_click=self.edit_clicked),
-                        ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip="Delete To-Do", on_click=self.delete_clicked),
+                        ft.IconButton(icon=ft.Icons.CREATE_OUTLINED,
+                                      tooltip="Edit To-Do",
+                                      on_click=self.edit_clicked),
+                        ft.IconButton(ft.Icons.DELETE_OUTLINE,
+                                      tooltip="Delete To-Do",
+                                      on_click=self.delete_clicked),
                     ],
                 ),
             ],
@@ -49,7 +71,10 @@ class Task(ft.Column):
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 self.edit_name,
-                ft.IconButton(icon=ft.Icons.DONE_OUTLINE_OUTLINED, icon_color=ft.Colors.GREEN, tooltip="Update To-Do", on_click=self.save_clicked),
+                ft.IconButton(icon=ft.Icons.DONE_OUTLINE_OUTLINED,
+                              icon_color=ft.Colors.GREEN,
+                              tooltip="Update To-Do",
+                              on_click=self.save_clicked),
             ],
         )
         self.controls = [self.display_view, self.edit_view]
@@ -66,142 +91,252 @@ class Task(ft.Column):
         self.display_view.visible = True
         self.edit_view.visible = False
         self.update()
-        if self.on_status_change: 
+        if self.on_status_change:
             self.on_status_change()
 
     def status_changed(self, e):
         self.completed = self.display_task.value
-        if self.on_status_change: 
+        if self.on_status_change:
             self.on_status_change()
 
     def delete_clicked(self, e):
+        print(f"[TO-DO] A remover tarefa: {self.task_name}")
         if self.on_delete:
             self.on_delete(self)
 
 
 @ft.control
-class TodoApp(ft.Column):
-    def __init__(self, page: ft.Page):
+class LoginView(ft.Column):
+
+    def __init__(self, on_login):
         super().__init__()
-        self._page_ref = page 
-        
-        self.new_task = ft.TextField(hint_text="Whats needs to be done?", expand=True)
+        self.on_login = on_login
+
+        self.controls = [
+            ft.Container(
+                content=ft.Column(
+                    controls=[
+                        ft.Text("To-Do App",
+                                size=30,
+                                weight=ft.FontWeight.BOLD),
+                        ft.Text("Faça login para aceder às suas tarefas",
+                                size=16),
+                        ft.Container(height=20),
+                        ft.Button(
+                            "Login com GitHub",
+                            icon=ft.Icons.LOGIN,
+                            on_click=self.login_clicked,
+                            style=ft.ButtonStyle(
+                                bgcolor=ft.Colors.BLACK,
+                                color=ft.Colors.WHITE,
+                            ),
+                        ),
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                ),
+                padding=50,
+                expand=True,
+            )
+        ]
+
+    def login_clicked(self, e):
+        state = str(uuid.uuid4())
+        url = f"{OAUTH_URL}?client_id={GITHUB_CLIENT_ID}&redirect_uri=http://localhost:8550/oauth_callback&scope=read:user&state={state}"
+        self.on_login(url)
+
+
+@ft.control
+class TodoApp(ft.Column):
+
+    def __init__(self, page: ft.Page, user_id: str):
+        super().__init__()
+        self._page_ref = page
+        self.user_id = user_id
+
+        self.new_task = ft.TextField(hint_text="Whats needs to be done?",
+                                     expand=True)
         self.tasks = ft.Column()
 
         self.filter = ft.TabBar(
             scrollable=False,
-            tabs=[ft.Tab(label="all"), ft.Tab(label="active"), ft.Tab(label="completed")],
+            tabs=[
+                ft.Tab(label="all"),
+                ft.Tab(label="active"),
+                ft.Tab(label="completed")
+            ],
         )
 
-
-        self.filter_tabs = ft.Tabs(
-            length=3, selected_index=0, on_change=lambda e: self.update(), content=self.filter
-        )
+        self.filter_tabs = ft.Tabs(length=3,
+                                   selected_index=0,
+                                   on_change=lambda e: self.update(),
+                                   content=self.filter)
 
         self.width = 600
         self.controls = [
-            ft.Row(controls=[self.new_task, ft.FloatingActionButton(icon=ft.Icons.ADD, on_click=self.add_clicked)]),
-            ft.Column(spacing=25, controls=[self.filter_tabs, self.tasks, ft.Button("Clear completed", on_click=self.clear_completed)]),
+            ft.Row(controls=[
+                self.new_task,
+                ft.FloatingActionButton(icon=ft.Icons.ADD,
+                                        on_click=self.add_clicked)
+            ]),
+            ft.Column(spacing=25,
+                      controls=[
+                          self.filter_tabs, self.tasks,
+                          ft.Button("Clear completed",
+                                    on_click=self.clear_completed)
+                      ]),
         ]
-        
 
         self.load_tasks()
 
-
-    # --- DuckDB & Client Storage ---
-
     def load_tasks(self):
+        if not self.user_id:
+            return
+
         tasks_data = []
-        loaded = False
-        
-        # 1. Tentar carregar do Client-Side Storage (Web) ou Ficheiro Local (Desktop)
-        
-        # Tentativa A: Client-Side Storage (Browser)
+
+        # --- DUCKDB / PARQUET ---
         try:
-            if hasattr(self._page_ref, 'client_storage'):
-                stored_json = self._page_ref.client_storage.get(JSON_STORAGE_KEY)
-                if stored_json:
-                    tasks_data = json.loads(stored_json)
-                    print("Carregado do Client-Side (Browser).")
-                    loaded = True
-        except: pass
+            import duckdb
 
-        # Tentativa B: Ficheiro Local JSON (Desktop/App)
-        if not loaded and os.path.exists(JSON_FILE):
-            try:
-                with open(JSON_FILE, "r", encoding="utf-8") as f:
-                    tasks_data = json.load(f)
-                    print("Carregado do ficheiro JSON local.")
-                    loaded = True
-            except: pass
+            if os.path.exists(PARQUET_FILE):
+                # Ler diretamente do ficheiro Parquet
+                result = duckdb.sql(
+                    f"SELECT task_data FROM '{PARQUET_FILE}' WHERE user_id = '{self.user_id}'"
+                ).fetchone()
 
-        # 2. Se não tiver nada, tenta carregar do ficheiro Parquet (DuckDB)
-        if not loaded and os.path.exists(PARQUET_FILE):
-            try:
-                con = duckdb.connect()
-                
-                # Agora deve funcionar porque os nomes das colunas vão corresponder
-                result = con.execute(f"SELECT task_id, task_name, completed FROM '{PARQUET_FILE}'").fetchall()
-                con.close()
-                
                 if result:
-                    tasks_data = [{"task_id": r[0], "task_name": r[1], "completed": r[2]} for r in result]
-                    print("Carregado do ficheiro Parquet (DuckDB).")
-            except Exception as e:
-                print(f"Erro DuckDB Load: {e}")
+                    encrypted_data = result[0]
+                    decrypted = decrypt(encrypted_data, SECRET_KEY)
+                    if isinstance(decrypted, bytes):
+                        tasks_data = json.loads(decrypted.decode('utf-8'))
+                    else:
+                        tasks_data = json.loads(decrypted)
+                    print(f"[TO-DO] Dados carregados do Parquet")
+        except Exception as e:
+            print(f"[TO-DO] Erro ao carregar de Parquet: {e}")
 
-        # Popular a UI
+        # Fallback: Client-Side Storage
+        if not tasks_data:
+            try:
+                if hasattr(self._page_ref, 'client_storage') and SECRET_KEY:
+                    storage_key = f"{JSON_STORAGE_KEY}_{self.user_id}"
+                    stored_encrypted = self._page_ref.client_storage.get(
+                        storage_key)
+                    if stored_encrypted:
+                        decrypted = decrypt(stored_encrypted, SECRET_KEY)
+                        if isinstance(decrypted, bytes):
+                            tasks_data = json.loads(decrypted.decode('utf-8'))
+                        else:
+                            tasks_data = json.loads(decrypted)
+            except:
+                pass
+
+        # Fallback: Ficheiro Local JSON
+        if not tasks_data:
+            try:
+                if os.path.exists(JSON_FILE) and SECRET_KEY:
+                    user_json_file = f"tasks_{self.user_id}.json"
+                    if os.path.exists(user_json_file):
+                        with open(user_json_file, "r", encoding="utf-8") as f:
+                            encrypted_data = f.read()
+                            if encrypted_data:
+                                decrypted = decrypt(encrypted_data, SECRET_KEY)
+                                if isinstance(decrypted, bytes):
+                                    tasks_data = json.loads(
+                                        decrypted.decode('utf-8'))
+                                else:
+                                    tasks_data = json.loads(decrypted)
+            except:
+                pass
+
         for t in tasks_data:
-            self.add_task_to_ui(t.get('task_name'), t.get('task_id'), t.get('completed'))
+            self.add_task_to_ui(t.get('task_name'), t.get('task_id'),
+                                t.get('completed'))
 
     def save_tasks(self):
-        # Serializar tarefas
+        if not self.user_id:
+            return
+
         tasks_list = []
         for task in self.tasks.controls:
-            tasks_list.append((task.task_id, task.task_name, task.completed))
+            tasks_list.append({
+                "task_id": task.task_id,
+                "task_name": task.task_name,
+                "completed": task.completed
+            })
 
-        # (A) Client-Side Storage
+        if not SECRET_KEY:
+            return
+
+        json_str = json.dumps(tasks_list)
+        encrypted_data = encrypt(json_str, SECRET_KEY)
+
+        # --- DUCKDB / PARQUET ---
         try:
-            json_str = json.dumps([{"task_id": t[0], "task_name": t[1], "completed": t[2]} for t in tasks_list])
-            
-            # Tentar guardar no client_storage do browser
+            import duckdb
+
+            # Guardar TODOS os dados (outros users + atual)
+            all_data = []
+
+            # 1. Se ficheiro existe, ler dados dos OUTROS utilizadores
+            if os.path.exists(PARQUET_FILE):
+                try:
+                    all_rows = duckdb.sql(
+                        f"SELECT user_id, task_data FROM '{PARQUET_FILE}' WHERE user_id != '{self.user_id}'"
+                    ).fetchall()
+                    for row in all_rows:
+                        all_data.append((row[0], row[1]))
+                except:
+                    pass
+
+            # 2. Adicionar dados do utilizador ATUAL
+            all_data.append((self.user_id, encrypted_data))
+
+            # 3. Criar nova tabela e guardar TUDO no Parquet
+            if all_data:
+                con = duckdb.connect()
+
+                # Criar tabela temporária
+                con.execute(
+                    "CREATE TEMPORARY TABLE dados(user_id VARCHAR, task_data VARCHAR)"
+                )
+
+                # Inserir todos os dados
+                for uid, tdata in all_data:
+                    con.execute("INSERT INTO dados VALUES (?, ?)",
+                                [uid, tdata])
+
+                # Exportar para Parquet (sobrescreve o ficheiro)
+                con.execute(f"COPY dados TO '{PARQUET_FILE}' (FORMAT PARQUET)")
+                con.close()
+
+                print(f"[TO-DO] Dados guardados em Parquet")
+        except Exception as e:
+            print(f"[TO-DO] Erro ao guardar em Parquet: {e}")
+
+        # Client-Side Storage
+        try:
             if hasattr(self._page_ref, 'client_storage'):
-                self._page_ref.client_storage.set(JSON_STORAGE_KEY, json_str)
-                print("Salvo no Client-Side (Browser)")
-            
-            # Também guardar num ficheiro local JSON
-            with open(JSON_FILE, "w", encoding="utf-8") as f:
-                json.dump(json.loads(json_str), f, indent=4)
-                
-        except Exception as e:
-            print(f"Erro armazenamento A: {e}")
+                storage_key = f"{JSON_STORAGE_KEY}_{self.user_id}"
+                self._page_ref.client_storage.set(storage_key, encrypted_data)
 
-        # (B) DuckDB -> Parquet
-        try:
-            con = duckdb.connect(':memory:')
-            
-            # CORREÇÃO: Criar tabela com os nomes corretos das colunas (task_id, task_name)
-            con.execute("CREATE TABLE tasks (task_id TEXT, task_name TEXT, completed BOOLEAN)")
-            
-            if tasks_list:
-                # Inserir dados na tabela
-                con.executemany("INSERT INTO tasks VALUES (?, ?, ?)", tasks_list)
-                
-                # Exportar a tabela para ficheiro Parquet
-                con.execute(f"COPY tasks TO '{PARQUET_FILE}' (FORMAT PARQUET)")
-            
-            con.close()
-            print(f"Guardado em {PARQUET_FILE}")
-        except Exception as e:
-            print(f"Erro DuckDB Save: {e}")
+            user_json_file = f"tasks_{self.user_id}.json"
+            with open(user_json_file, "w", encoding="utf-8") as f:
+                f.write(encrypted_data)
+        except:
+            pass
 
     def add_task_to_ui(self, task_name, task_id=None, completed=False):
-        task = Task(task_name=task_name, task_id=task_id, completed=completed,
-                    on_status_change=self.task_status_change, on_delete=self.task_delete)
+        task = Task(task_name=task_name,
+                    task_id=task_id,
+                    completed=completed,
+                    on_status_change=self.task_status_change,
+                    on_delete=self.task_delete)
         self.tasks.controls.append(task)
 
-    # --- Ações ---
     def add_clicked(self, e):
+        print(f"[TO-DO] A adicionar tarefa: {self.new_task.value}")
         self.add_task_to_ui(self.new_task.value)
         self.new_task.value = ""
         self.save_tasks()
@@ -212,26 +347,76 @@ class TodoApp(ft.Column):
         self.update()
 
     def task_delete(self, task):
+        print(f"[TO-DO] Tarefa '{task.task_name}' removida com sucesso.")
         self.tasks.controls.remove(task)
         self.save_tasks()
         self.update()
-    
+
     def clear_completed(self, e):
-        self.tasks.controls = [task for task in self.tasks.controls if not task.completed]
+        print("[TO-DO] A limpar tarefas concluídas.")
+        self.tasks.controls = [
+            task for task in self.tasks.controls if not task.completed
+        ]
         self.save_tasks()
         self.update()
 
     def before_update(self):
         status = self.filter.tabs[self.filter_tabs.selected_index].label
         for task in self.tasks.controls:
-            task.visible = (status == "all" or (status == "active" and not task.completed) or (status == "completed" and task.completed))
+            task.visible = (status == "all"
+                            or (status == "active" and not task.completed)
+                            or (status == "completed" and task.completed))
 
 
-def main(page: ft.Page):
-    page.title = "To-Do App DuckDB"
+async def main(page: ft.Page):
+    page.title = "To-Do App Autenticada"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
-    page.update()
-    app = TodoApp(page)
-    page.add(app)
 
-ft.run(main)
+    provider = GitHubOAuthProvider(
+    client_id=os.getenv("GITHUB_CLIENT_ID"),
+    client_secret=os.getenv("GITHUB_CLIENT_SECRET"),
+    redirect_url=os.getenv("REDIRECT_URL"),
+)
+
+    async def login_button_click(e):
+        await page.login(provider, scope=["public_repo"])
+
+    def on_login(e: ft.LoginEvent):
+        if not e.error:
+            toggle_login_buttons()
+        else:
+            print(f"Erro no login: {e.error}")
+
+    def logout_button_click(e):
+        page.logout()
+
+    def on_logout(e):
+        toggle_login_buttons()
+
+    def toggle_login_buttons():
+        is_logged_in = page.auth is not None
+
+        page.controls.clear()
+
+        if is_logged_in:
+            user_id = str(page.auth.user.id)
+            app = TodoApp(page, user_id)
+            page.add(logout_button, app)
+        else:
+            page.add(login_button)
+
+        page.update()
+
+    login_button = ft.Button("Login with GitHub", on_click=login_button_click)
+    logout_button = ft.Button("Logout", on_click=logout_button_click)
+
+    toggle_login_buttons()
+
+    page.on_login = on_login
+    page.on_logout = on_logout
+
+#parte de deploy feita para conseguir funcionar no Replit 
+if os.getenv("DEPLOY"):
+    ft.app(target=main, assets_dir="assets")
+else:
+    ft.run(main, port=8550, view=ft.AppView.WEB_BROWSER)
