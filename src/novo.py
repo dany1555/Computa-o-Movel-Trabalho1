@@ -117,6 +117,7 @@ class TodoApp(ft.Column):
         # 1. Tentar carregar do Client-Side Storage (Web) ou Ficheiro Local (Desktop)
         
         # Tentativa A: Client-Side Storage (Browser)
+        #Parte to client Storage Feita 
         try:
             if hasattr(self._page_ref, 'client_storage'):
                 stored_json = self._page_ref.client_storage.get(JSON_STORAGE_KEY)
