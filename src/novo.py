@@ -116,7 +116,8 @@ class TodoApp(ft.Column):
     def load_tasks(self):
         tasks_data = []
         loaded = False
-        
+
+        # Feita para todos os armazenamentos a encriptação e desencriptação 
         # 1. Client-Side Storage (Browser)
         try:
             if hasattr(self._page_ref, 'client_storage') and SECRET_KEY:
