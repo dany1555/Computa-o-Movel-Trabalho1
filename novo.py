@@ -79,6 +79,7 @@ class Task(ft.Column):
 @ft.control
 class TodoApp(ft.Column):
     # application's root control is a Column containing all other controls
+    # Parte feita do Objetivo seguindo os passos que eram dados no guia
     def init(self):
         self.new_task = ft.TextField(hint_text="Whats needs to be done?", expand=True)
         self.tasks = ft.Column()
