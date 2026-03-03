@@ -136,6 +136,7 @@ class TodoApp(ft.Column):
             except: pass
 
         # 2. Se não tiver nada, tenta carregar do ficheiro Parquet (DuckDB)
+        #Parte do DuckDb carregada para implementar armazenamento em duckdb
         if not loaded and os.path.exists(PARQUET_FILE):
             try:
                 con = duckdb.connect()
