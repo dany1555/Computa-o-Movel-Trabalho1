@@ -12,7 +12,7 @@ JSON_FILE = "tasks_local.json"
 JSON_STORAGE_KEY = "todo_tasks_list"
 
 @ft.control
-class Task(ft.Column):
+class Task(ft.Column):  # parte do task id unico feita
     def __init__(self, task_name: str, task_id: str = None, completed: bool = False, on_status_change: Callable = None, on_delete: Callable = None):
         super().__init__()
         self.task_id = task_id if task_id else str(uuid.uuid4())
