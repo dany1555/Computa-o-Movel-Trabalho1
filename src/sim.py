@@ -15,6 +15,7 @@ GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 
 # URLs do OAuth
+# Implementado Auth url com união com o github AUTH
 OAUTH_URL = "https://github.com/login/oauth/authorize"
 TOKEN_URL = "https://github.com/login/oauth/access_token"
 API_USER_URL = "https://api.github.com/user"
@@ -128,7 +129,7 @@ class LoginView(ft.Column):
         state = str(uuid.uuid4())
         url = f"{OAUTH_URL}?client_id={GITHUB_CLIENT_ID}&redirect_uri=http://localhost:8550/oauth_callback&scope=read:user&state={state}"
         self.on_login(url)
-
+        #Uso de Redirect url do Github e uso de github client ID e Client secret para conexao com o botao de login para o url certo e funcionar a aplicação
 
 @ft.control
 class TodoApp(ft.Column):
