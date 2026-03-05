@@ -133,17 +133,29 @@ class TodoApp(ft.Column):
 
         self.width = 600
         self.controls = [
+            ft.Row(
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                controls=[
+                    ft.Text("To-Do App", size=20, weight=ft.FontWeight.BOLD),
+                    ft.IconButton(
+                        icon=ft.Icons.WB_SUNNY_OUTLINED,
+                        icon_color=ft.Colors.GREY_700,
+                        tooltip="Mudar Tema",
+                        on_click=self.toggle_theme
+                    )
+                ]
+            ),
             ft.Row(controls=[
                 self.new_task,
                 ft.FloatingActionButton(icon=ft.Icons.ADD,
                                         on_click=self.add_clicked)
             ]),
             ft.Column(spacing=25,
-                      controls=[
-                          self.filter_tabs, self.tasks,
-                          ft.Button("Clear completed",
+                    controls=[
+                        self.filter_tabs, self.tasks,
+                        ft.Button("Clear completed",
                                     on_click=self.clear_completed)
-                      ]),
+                    ]),
         ]
 
         self.load_tasks()
@@ -325,11 +337,20 @@ class TodoApp(ft.Column):
             task.visible = (status == "all"
                             or (status == "active" and not task.completed)
                             or (status == "completed" and task.completed))
+            
+    def toggle_theme(self, e):
+        # Alterna entre claro e escuro
+        if self._page_ref.theme_mode == ft.ThemeMode.LIGHT:
+            self._page_ref.theme_mode = ft.ThemeMode.DARK
+        else:
+            self._page_ref.theme_mode = ft.ThemeMode.LIGHT
+        self._page_ref.update()
 
 
 async def main(page: ft.Page):
     page.title = "To-Do App Autenticada"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+    page.theme_mode = ft.ThemeMode.DARK  # Tema inicial
 
     provider = GitHubOAuthProvider(
     client_id=os.getenv("GITHUB_CLIENT_ID"),
