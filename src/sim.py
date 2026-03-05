@@ -106,47 +106,6 @@ class Task(ft.Column):
 
 
 @ft.control
-class LoginView(ft.Column):
-
-    def __init__(self, on_login):
-        super().__init__()
-        self.on_login = on_login
-
-        self.controls = [
-            ft.Container(
-                content=ft.Column(
-                    controls=[
-                        ft.Text("To-Do App",
-                                size=30,
-                                weight=ft.FontWeight.BOLD),
-                        ft.Text("Faça login para aceder às suas tarefas",
-                                size=16),
-                        ft.Container(height=20),
-                        ft.Button(
-                            "Login com GitHub",
-                            icon=ft.Icons.LOGIN,
-                            on_click=self.login_clicked,
-                            style=ft.ButtonStyle(
-                                bgcolor=ft.Colors.BLACK,
-                                color=ft.Colors.WHITE,
-                            ),
-                        ),
-                    ],
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    alignment=ft.MainAxisAlignment.CENTER,
-                ),
-                padding=50,
-                expand=True,
-            )
-        ]
-
-    def login_clicked(self, e):
-        state = str(uuid.uuid4())
-        url = f"{OAUTH_URL}?client_id={GITHUB_CLIENT_ID}&redirect_uri=http://localhost:8550/oauth_callback&scope=read:user&state={state}"
-        self.on_login(url)
-
-
-@ft.control
 class TodoApp(ft.Column):
 
     def __init__(self, page: ft.Page, user_id: str):
@@ -376,7 +335,7 @@ async def main(page: ft.Page):
     client_id=os.getenv("GITHUB_CLIENT_ID"),
     client_secret=os.getenv("GITHUB_CLIENT_SECRET"),
     redirect_url=os.getenv("REDIRECT_URL"),
-)
+    )
 
     async def login_button_click(e):
         await page.login(provider, scope=["public_repo"])
@@ -403,11 +362,26 @@ async def main(page: ft.Page):
             app = TodoApp(page, user_id)
             page.add(logout_button, app)
         else:
-            page.add(login_button)
+            # Texto no inicio
+            page.add(
+                ft.Column(
+                    controls=[
+                        ft.Text("To-Do App",
+                                size=30,
+                                weight=ft.FontWeight.BOLD),
+                        ft.Text("Faça login para aceder a aplicação e as suas Tarefas",
+                                size=16),
+                        ft.Container(height=10),
+                        ft.Button("Login with GitHub", on_click=login_button_click)
+                    ],
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    expand=True
+                )
+            )
 
         page.update()
 
-    login_button = ft.Button("Login with GitHub", on_click=login_button_click)
     logout_button = ft.Button("Logout", on_click=logout_button_click)
 
     toggle_login_buttons()
