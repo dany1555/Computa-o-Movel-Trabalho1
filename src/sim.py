@@ -351,6 +351,7 @@ async def main(page: ft.Page):
     page.title = "To-Do App Autenticada"
     page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     page.theme_mode = ft.ThemeMode.DARK  # Tema inicial
+    page.favicon = "favicon.ico"  
 
     provider = GitHubOAuthProvider(
     client_id=os.getenv("GITHUB_CLIENT_ID"),
